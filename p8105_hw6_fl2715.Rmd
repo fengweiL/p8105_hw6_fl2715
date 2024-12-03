@@ -171,4 +171,86 @@ city_results |>
 **Comments**:
 This plot compares the likelihood of solving homicides involving male versus female victims in different cities. In most cities, cases with male victims are less likely to be solved (odds ratios below 1), with some cities like New York and Baton Rouge showing especially low chances for male victims. A few cities, like Albuquerque and Stockton, show higher chances for male cases. Wide error bars in some cities mean there is uncertainty in the data.
 
+## Problem 3
+
+First, we load and clean the data.
+```{r}
+birthweight_data=read_csv(
+  "data/birthweight.csv",
+  na = c("NA", ".", "")) |> 
+  janitor::clean_names() |> 
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("Male", "Female")),
+    frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+    mrace = factor(mrace, levels = c(1, 2, 3, 4, 8), labels = c("White", "Black", "Asian", "Puerto Rican", "Other")),
+    malform = factor(malform, levels = c(0, 1), labels = c("Absent", "Present"))
+  ) |> 
+  drop_na()
+```
+
+Then, we propose a regression model for birthweight. The **modeling process** is as follows:
+
+The proposed linear regression model is built to predict birth weight (bwt) using key predictors: `delwt`, `gaweeks`, `ppbmi`, `momage`, and `smoken`. The model is trained on the whole dataset.
+```{r}
+lm_model = lm(
+  bwt ~ delwt + gaweeks+ppbmi+momage+smoken, 
+  data = birthweight_data)
+
+summary(lm_model)
+```
+
+The plot of model residuals against fitted values is as follows.
+```{r}
+birthweight_lm = birthweight_data |> 
+  add_predictions(lm_model) |> 
+  add_residuals(lm_model)
+
+ggplot(birthweight_lm, aes(x = pred, y = resid)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red") +
+  labs(title = "Residuals vs Fitted Values", x = "Fitted values", y = "Residuals")
+```
+
+
+```{r}
+cv_df = 
+  crossv_mc(birthweight_data, 100) |> 
+  mutate(
+    train = map(train, as_tibble), 
+    test = map(test, as_tibble)  
+  )
+
+cv_df = cv_df |> 
+  mutate(
+    lm_model = map(train, \(df) lm(bwt ~ delwt + gaweeks+ppbmi+momage+smoken, 
+                                   data = df)),
+    model_length_ga = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+    model_interaction = map(train, \(df) lm(bwt ~ bhead * blength * babysex, data = df))
+  ) |> 
+  mutate(
+    rmse_lm_model = map2_dbl(lm_model, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_length_ga = map2_dbl(model_length_ga, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_interaction = map2_dbl(model_interaction, test, \(mod, df) rmse(model = mod, data = df))
+  )
+
+rmse_results = cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    cols = everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) |> 
+  mutate(model = fct_inorder(model))
+
+rmse_results |> 
+  ggplot(aes(x = model, y = rmse)) + 
+  geom_violin(fill = "skyblue", alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "Cross-validated RMSE for Different Models",
+    x = "Model",
+    y = "RMSE"
+  )
+```
 
