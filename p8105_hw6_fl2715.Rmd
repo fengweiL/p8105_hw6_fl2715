@@ -211,7 +211,7 @@ ggplot(birthweight_lm, aes(x = pred, y = resid)) +
   labs(title = "Residuals vs Fitted Values", x = "Fitted values", y = "Residuals")
 ```
 
-
+Finally, we compare the proposed model with two other models.
 ```{r}
 cv_df = 
   crossv_mc(birthweight_data, 100) |> 
